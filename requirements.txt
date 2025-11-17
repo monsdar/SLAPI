@@ -1,0 +1,6 @@
+beautifulsoup4
+Django
+django-ninja
+httpx
+python-dotenv
+whitenoise[brotli]
