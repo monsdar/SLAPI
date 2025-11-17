@@ -22,7 +22,7 @@ class AdminUserCreationTests(TestCase):
         with patch.dict(os.environ, {
             'SLAPI_ADMIN_USER': 'testadmin',
             'SLAPI_ADMIN_PASSWORD': 'testpass123',
-        }):
+        }), patch('sys.argv', ['manage.py', 'runserver']):
             # Ensure user doesn't exist
             self.assertFalse(self.User.objects.filter(username='testadmin').exists())
 
@@ -46,7 +46,7 @@ class AdminUserCreationTests(TestCase):
         with patch.dict(os.environ, {
             'SLAPI_ADMIN_USER': 'existingadmin',
             'SLAPI_ADMIN_PASSWORD': 'newpassword',
-        }):
+        }), patch('sys.argv', ['manage.py', 'runserver']):
             # Call the function to trigger user creation logic
             create_admin_user_from_env()
 
@@ -59,7 +59,7 @@ class AdminUserCreationTests(TestCase):
         """Test that admin user is not created when SLAPI_ADMIN_USER is not set."""
         with patch.dict(os.environ, {
             'SLAPI_ADMIN_PASSWORD': 'testpass123',
-        }, clear=False):
+        }, clear=False), patch('sys.argv', ['manage.py', 'runserver']):
             # Remove SLAPI_ADMIN_USER if it exists
             os.environ.pop('SLAPI_ADMIN_USER', None)
 
@@ -73,7 +73,7 @@ class AdminUserCreationTests(TestCase):
         """Test that admin user is not created when SLAPI_ADMIN_PASSWORD is not set."""
         with patch.dict(os.environ, {
             'SLAPI_ADMIN_USER': 'testadmin',
-        }, clear=False):
+        }, clear=False), patch('sys.argv', ['manage.py', 'runserver']):
             # Remove SLAPI_ADMIN_PASSWORD if it exists
             os.environ.pop('SLAPI_ADMIN_PASSWORD', None)
 
@@ -85,7 +85,7 @@ class AdminUserCreationTests(TestCase):
 
     def test_admin_user_not_created_when_both_env_vars_missing(self):
         """Test that admin user is not created when both env vars are missing."""
-        with patch.dict(os.environ, {}, clear=False):
+        with patch.dict(os.environ, {}, clear=False), patch('sys.argv', ['manage.py', 'runserver']):
             # Remove both env vars if they exist
             os.environ.pop('SLAPI_ADMIN_USER', None)
             os.environ.pop('SLAPI_ADMIN_PASSWORD', None)
@@ -101,7 +101,7 @@ class AdminUserCreationTests(TestCase):
         with patch.dict(os.environ, {
             'SLAPI_ADMIN_USER': 'testadmin',
             'SLAPI_ADMIN_PASSWORD': 'testpass123',
-        }):
+        }), patch('sys.argv', ['manage.py', 'runserver']):
             # First call should create the user
             create_admin_user_from_env()
             self.assertEqual(self.User.objects.count(), 1)
@@ -128,7 +128,7 @@ class AdminUserCreationTests(TestCase):
         with patch.dict(os.environ, {
             'SLAPI_ADMIN_USER': 'raceadmin',
             'SLAPI_ADMIN_PASSWORD': 'newpassword',
-        }):
+        }), patch('sys.argv', ['manage.py', 'runserver']):
             # This should not raise an error even though user exists
             create_admin_user_from_env()
             

@@ -2,7 +2,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from api.services.cache import FileCache
 from api.services.client import TeamSLClient
@@ -202,6 +202,7 @@ class TeamSLServiceClubLeaguesTests(SimpleTestCase):
             self.assertEqual(client.call_count, 2)
 
 
+@override_settings(SLAPI_API_TOKEN=None)
 class ClubLeaguesAPITests(TestCase):
     """Tests for the /clubs/{club_name}/leagues API endpoint."""
 

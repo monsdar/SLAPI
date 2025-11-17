@@ -2,7 +2,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
-from django.test import TestCase, SimpleTestCase
+from django.test import TestCase, SimpleTestCase, override_settings
 
 from api.services.cache import FileCache
 from api.services.client import TeamSLClient
@@ -278,6 +278,7 @@ class TeamSLClientStandingsTests(SimpleTestCase):
         self.assertEqual(client.base_url, "https://www.basketball-bund.net")
 
 
+@override_settings(SLAPI_API_TOKEN=None)
 class StandingsEndpointTests(TestCase):
     """Tests for the standings API endpoint."""
 

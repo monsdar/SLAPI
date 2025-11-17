@@ -17,8 +17,8 @@ def create_admin_user_from_env():
     if _admin_user_created:
         return
     
-    # Skip during migrations to avoid database errors
-    if 'migrate' in sys.argv or 'makemigrations' in sys.argv:
+    # Skip during migrations and tests to avoid database errors
+    if 'migrate' in sys.argv or 'makemigrations' in sys.argv or 'test' in sys.argv:
         return
 
     admin_username = os.getenv('SLAPI_ADMIN_USER')

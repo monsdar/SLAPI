@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
-from django.test import TestCase, SimpleTestCase
+from django.test import TestCase, SimpleTestCase, override_settings
 
 from api.services.cache import FileCache
 from api.services.client import TeamSLClient
@@ -343,6 +343,7 @@ class TeamSLClientMatchesTests(SimpleTestCase):
         self.assertIn("data", result)
 
 
+@override_settings(SLAPI_API_TOKEN=None)
 class MatchesEndpointTests(TestCase):
     """Tests for the matches API endpoint."""
 
