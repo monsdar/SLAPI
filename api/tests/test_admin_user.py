@@ -4,6 +4,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+import api.apps
 from api.apps import create_admin_user_from_env
 
 
@@ -13,6 +14,8 @@ class AdminUserCreationTests(TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.User = get_user_model()
+        # Reset the global flag before each test to ensure clean state
+        api.apps._admin_user_created = False
 
     def test_admin_user_created_when_env_vars_set_and_user_not_exists(self):
         """Test that admin user is created when env vars are set and user doesn't exist."""
@@ -92,4 +95,45 @@ class AdminUserCreationTests(TestCase):
 
             # Verify no user was created
             self.assertEqual(self.User.objects.count(), 0)
+
+    def test_admin_user_creation_only_runs_once(self):
+        """Test that the function only runs once even if called multiple times."""
+        with patch.dict(os.environ, {
+            'SLAPI_ADMIN_USER': 'testadmin',
+            'SLAPI_ADMIN_PASSWORD': 'testpass123',
+        }):
+            # First call should create the user
+            create_admin_user_from_env()
+            self.assertEqual(self.User.objects.count(), 1)
+            
+            # Second call should not create another user or raise an error
+            create_admin_user_from_env()
+            self.assertEqual(self.User.objects.count(), 1)
+            
+            # Third call should also be safe
+            create_admin_user_from_env()
+            self.assertEqual(self.User.objects.count(), 1)
+
+    def test_admin_user_creation_handles_race_condition(self):
+        """Test that IntegrityError is handled gracefully (race condition)."""
+        # Pre-create a user to simulate a race condition
+        self.User.objects.create_superuser(
+            username='raceadmin',
+            password='oldpassword',
+        )
+        
+        # Reset the flag to simulate the function being called again
+        api.apps._admin_user_created = False
+        
+        with patch.dict(os.environ, {
+            'SLAPI_ADMIN_USER': 'raceadmin',
+            'SLAPI_ADMIN_PASSWORD': 'newpassword',
+        }):
+            # This should not raise an error even though user exists
+            create_admin_user_from_env()
+            
+            # Verify only one user exists and password wasn't changed
+            self.assertEqual(self.User.objects.filter(username='raceadmin').count(), 1)
+            user = self.User.objects.get(username='raceadmin')
+            self.assertTrue(user.check_password('oldpassword'))
 
