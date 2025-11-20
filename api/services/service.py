@@ -258,7 +258,17 @@ class TeamSLService:
             # Determine match status
             is_finished = result is not None and result != ""
             is_confirmed = match.get("ergebnisbestaetigt", False)
-            is_cancelled = match.get("abgesagt", False)
+            
+            # A match is cancelled if:
+            # 1. It's explicitly marked as cancelled (abgesagt), OR
+            # 2. The match is marked as forfeit (verzicht), OR
+            # 3. Either team has forfeited (verzicht)
+            is_cancelled = (
+                match.get("abgesagt", False) or
+                match.get("verzicht", False) or
+                home_team_data.get("verzicht", False) or
+                away_team_data.get("verzicht", False)
+            )
             
             # Extract location if available (check common field names)
             location = (

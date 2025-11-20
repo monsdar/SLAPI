@@ -207,7 +207,7 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
         self.assertIsNone(match["location"])
 
     def test_normalize_matches_handles_cancelled_matches(self):
-        """Test that normalization correctly identifies cancelled matches."""
+        """Test that normalization correctly identifies cancelled matches (abgesagt)."""
         raw_data = {
             "status": 0,
             "data": {
@@ -218,11 +218,12 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
                         "matchNo": 1,
                         "kickoffDate": "2025-09-13",
                         "kickoffTime": "09:00",
-                        "homeTeam": {"teamname": "Home Team"},
-                        "guestTeam": {"teamname": "Away Team"},
+                        "homeTeam": {"teamname": "Home Team", "verzicht": False},
+                        "guestTeam": {"teamname": "Away Team", "verzicht": False},
                         "result": None,
                         "ergebnisbestaetigt": False,
                         "abgesagt": True,
+                        "verzicht": False,
                     }
                 ]
             }
@@ -233,6 +234,141 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
         self.assertEqual(len(result["matches"]), 1)
         match = result["matches"][0]
         self.assertTrue(match["is_cancelled"])
+        self.assertFalse(match["is_finished"])
+
+    def test_normalize_matches_handles_forfeited_match(self):
+        """Test that normalization correctly identifies matches marked as verzicht."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 12345,
+                        "matchDay": 1,
+                        "matchNo": 1,
+                        "kickoffDate": "2025-09-13",
+                        "kickoffTime": "09:00",
+                        "homeTeam": {"teamname": "Home Team", "verzicht": False},
+                        "guestTeam": {"teamname": "Away Team", "verzicht": False},
+                        "result": None,
+                        "ergebnisbestaetigt": False,
+                        "abgesagt": False,
+                        "verzicht": True,
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "12345")
+
+        self.assertEqual(len(result["matches"]), 1)
+        match = result["matches"][0]
+        self.assertTrue(match["is_cancelled"])
+        self.assertFalse(match["is_finished"])
+
+    def test_normalize_matches_handles_home_team_forfeit(self):
+        """Test that normalization identifies matches as cancelled when home team forfeits."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 2788891,
+                        "matchDay": 1,
+                        "matchNo": 1,
+                        "kickoffDate": "2025-09-28",
+                        "kickoffTime": "14:00",
+                        "homeTeam": {
+                            "teamname": "Bremen 1860 wbl.",
+                            "seasonTeamId": 415078,
+                            "verzicht": True,
+                        },
+                        "guestTeam": {
+                            "teamname": "TSV Okel e.V.",
+                            "seasonTeamId": 430852,
+                            "verzicht": False,
+                        },
+                        "result": None,
+                        "ergebnisbestaetigt": False,
+                        "abgesagt": False,
+                        "verzicht": True,
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "48722")
+
+        self.assertEqual(len(result["matches"]), 1)
+        match = result["matches"][0]
+        self.assertTrue(match["is_cancelled"])
+        self.assertFalse(match["is_finished"])
+        self.assertEqual(match["home_team"]["name"], "Bremen 1860 wbl.")
+
+    def test_normalize_matches_handles_away_team_forfeit(self):
+        """Test that normalization identifies matches as cancelled when away team forfeits."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 12345,
+                        "matchDay": 1,
+                        "matchNo": 1,
+                        "kickoffDate": "2025-09-13",
+                        "kickoffTime": "09:00",
+                        "homeTeam": {
+                            "teamname": "Home Team",
+                            "verzicht": False,
+                        },
+                        "guestTeam": {
+                            "teamname": "Away Team",
+                            "verzicht": True,
+                        },
+                        "result": None,
+                        "ergebnisbestaetigt": False,
+                        "abgesagt": False,
+                        "verzicht": False,
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "12345")
+
+        self.assertEqual(len(result["matches"]), 1)
+        match = result["matches"][0]
+        self.assertTrue(match["is_cancelled"])
+        self.assertFalse(match["is_finished"])
+
+    def test_normalize_matches_not_cancelled_when_no_forfeit_or_abgesagt(self):
+        """Test that matches are not marked as cancelled when verzicht and abgesagt are false."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 12345,
+                        "matchDay": 1,
+                        "matchNo": 1,
+                        "kickoffDate": "2025-09-13",
+                        "kickoffTime": "09:00",
+                        "homeTeam": {"teamname": "Home Team", "verzicht": False},
+                        "guestTeam": {"teamname": "Away Team", "verzicht": False},
+                        "result": None,
+                        "ergebnisbestaetigt": False,
+                        "abgesagt": False,
+                        "verzicht": False,
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "12345")
+
+        self.assertEqual(len(result["matches"]), 1)
+        match = result["matches"][0]
+        self.assertFalse(match["is_cancelled"])
         self.assertFalse(match["is_finished"])
 
     def test_normalize_matches_handles_empty_matches(self):
