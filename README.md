@@ -41,8 +41,9 @@ This project is built with the following technologies:
 | `SLAPI_ADMIN_USER` | Default admin user to access the admin panel |
 | `SLAPI_ADMIN_PASSWORD` | Default admin password to access the admin panel |
 | `SLAPI_API_TOKEN` | API token for authenticating API requests (optional) | None |
+| `CACHE_RETENTION_TIME_MIN` | Cache retention time in minutes | `2` |
 
-Cache data is stored in local files within the cache directory. Configure `SLAPI_CACHE_DIRECTORY` to change location and configure a volume to persist the cache throughout redeployments.
+Cache data is stored in local files within the cache directory. Configure `SLAPI_CACHE_DIRECTORY` to change location and configure a volume to persist the cache throughout redeployments. Cached responses automatically expire after `CACHE_RETENTION_TIME_MIN` minutes to ensure fresh data while avoiding redundant fast-cycle calls.
 
 ### Authentication
 

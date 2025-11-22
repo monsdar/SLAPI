@@ -142,3 +142,6 @@ SLAPI_UPSTREAM_BASE_URL = os.getenv(
 )
 
 SLAPI_API_TOKEN = os.getenv('SLAPI_API_TOKEN', None)
+
+# Cache retention time in minutes (default: 2 minutes)
+CACHE_RETENTION_TIME_MIN = int(os.getenv('CACHE_RETENTION_TIME_MIN', '2'))
