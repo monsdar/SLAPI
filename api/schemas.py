@@ -55,6 +55,8 @@ class Match(Schema):
     away_team: Team
     location: Optional[str] = None
     score: Optional[str] = None
+    score_home: Optional[int] = None
+    score_away: Optional[int] = None
     is_finished: bool
     is_confirmed: bool
     is_cancelled: bool

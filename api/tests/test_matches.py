@@ -163,6 +163,8 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
         self.assertEqual(first["home_team"]["club_id"], 153)
         self.assertEqual(first["away_team"]["name"], "TV Delmenhorst")
         self.assertEqual(first["score"], "76:64")
+        self.assertEqual(first["score_home"], 76)
+        self.assertEqual(first["score_away"], 64)
         self.assertTrue(first["is_finished"])
         self.assertTrue(first["is_confirmed"])
         self.assertFalse(first["is_cancelled"])
@@ -173,6 +175,8 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
         self.assertIsInstance(second["datetime"], datetime)
         self.assertEqual(second["datetime"].strftime("%Y-%m-%d %H:%M"), "2025-09-20 18:00")
         self.assertIsNone(second["score"])
+        self.assertIsNone(second["score_home"])
+        self.assertIsNone(second["score_away"])
         self.assertFalse(second["is_finished"])
         self.assertFalse(second["is_confirmed"])
 
@@ -201,6 +205,8 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
         self.assertEqual(match["match_day"], 1)
         self.assertEqual(match["match_no"], 0)  # Default value
         self.assertIsNone(match["score"])
+        self.assertIsNone(match["score_home"])
+        self.assertIsNone(match["score_away"])
         self.assertFalse(match["is_finished"])
         self.assertFalse(match["is_confirmed"])
         self.assertFalse(match["is_cancelled"])
@@ -411,6 +417,132 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
         self.assertIsInstance(match["datetime"], datetime)
         self.assertEqual(match["datetime"].strftime("%Y-%m-%d"), "2025-09-13")
 
+    def test_normalize_matches_parses_score_with_colon(self):
+        """Test that score parsing works with colon separator (standard format)."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 12345,
+                        "matchDay": 1,
+                        "kickoffDate": "2025-09-13",
+                        "homeTeam": {"teamname": "Home Team"},
+                        "guestTeam": {"teamname": "Away Team"},
+                        "result": "100:50",
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "12345")
+
+        match = result["matches"][0]
+        self.assertEqual(match["score"], "100:50")
+        self.assertEqual(match["score_home"], 100)
+        self.assertEqual(match["score_away"], 50)
+
+    def test_normalize_matches_parses_score_with_dash(self):
+        """Test that score parsing works with dash separator (alternative format)."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 12345,
+                        "matchDay": 1,
+                        "kickoffDate": "2025-09-13",
+                        "homeTeam": {"teamname": "Home Team"},
+                        "guestTeam": {"teamname": "Away Team"},
+                        "result": "85-72",
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "12345")
+
+        match = result["matches"][0]
+        self.assertEqual(match["score"], "85-72")
+        self.assertEqual(match["score_home"], 85)
+        self.assertEqual(match["score_away"], 72)
+
+    def test_normalize_matches_parses_score_with_whitespace(self):
+        """Test that score parsing handles extra whitespace."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 12345,
+                        "matchDay": 1,
+                        "kickoffDate": "2025-09-13",
+                        "homeTeam": {"teamname": "Home Team"},
+                        "guestTeam": {"teamname": "Away Team"},
+                        "result": " 95 : 88 ",
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "12345")
+
+        match = result["matches"][0]
+        self.assertEqual(match["score"], " 95 : 88 ")
+        self.assertEqual(match["score_home"], 95)
+        self.assertEqual(match["score_away"], 88)
+
+    def test_normalize_matches_handles_invalid_score_format(self):
+        """Test that invalid score formats are handled gracefully."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 12345,
+                        "matchDay": 1,
+                        "kickoffDate": "2025-09-13",
+                        "homeTeam": {"teamname": "Home Team"},
+                        "guestTeam": {"teamname": "Away Team"},
+                        "result": "Invalid",
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "12345")
+
+        match = result["matches"][0]
+        self.assertEqual(match["score"], "Invalid")
+        self.assertIsNone(match["score_home"])
+        self.assertIsNone(match["score_away"])
+
+    def test_normalize_matches_handles_empty_score(self):
+        """Test that empty score strings are handled correctly."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 12345,
+                        "matchDay": 1,
+                        "kickoffDate": "2025-09-13",
+                        "homeTeam": {"teamname": "Home Team"},
+                        "guestTeam": {"teamname": "Away Team"},
+                        "result": "",
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "12345")
+
+        match = result["matches"][0]
+        self.assertIsNone(match["score"])
+        self.assertIsNone(match["score_home"])
+        self.assertIsNone(match["score_away"])
+        self.assertFalse(match["is_finished"])
+
 
 class TeamSLClientMatchesTests(SimpleTestCase):
     """Tests for matches functionality in TeamSLClient."""
@@ -507,6 +639,8 @@ class MatchesEndpointTests(TestCase):
                         },
                         "location": None,
                         "score": "76:64",
+                        "score_home": 76,
+                        "score_away": 64,
                         "is_finished": True,
                         "is_confirmed": True,
                         "is_cancelled": False,
@@ -525,6 +659,8 @@ class MatchesEndpointTests(TestCase):
             self.assertEqual(data["matches"][0]["home_team"]["name"], "Home Team")
             self.assertEqual(data["matches"][0]["away_team"]["name"], "Away Team")
             self.assertEqual(data["matches"][0]["score"], "76:64")
+            self.assertEqual(data["matches"][0]["score_home"], 76)
+            self.assertEqual(data["matches"][0]["score_away"], 64)
             self.assertTrue(data["matches"][0]["is_finished"])
             self.assertTrue(data["matches"][0]["is_confirmed"])
 
@@ -556,6 +692,8 @@ class MatchesEndpointTests(TestCase):
                         "away_team": {"id": "2", "name": "Away Team"},
                         "location": None,
                         "score": "76:64",
+                        "score_home": 76,
+                        "score_away": 64,
                         "is_finished": True,
                         "is_confirmed": True,
                         "is_cancelled": False,
@@ -569,6 +707,8 @@ class MatchesEndpointTests(TestCase):
                         "away_team": {"id": "4", "name": "Future Away"},
                         "location": "Sports Hall",
                         "score": None,
+                        "score_home": None,
+                        "score_away": None,
                         "is_finished": False,
                         "is_confirmed": False,
                         "is_cancelled": False,
@@ -586,10 +726,14 @@ class MatchesEndpointTests(TestCase):
             finished = data["matches"][0]
             self.assertTrue(finished["is_finished"])
             self.assertIsNotNone(finished["score"])
+            self.assertEqual(finished["score_home"], 76)
+            self.assertEqual(finished["score_away"], 64)
             
             # Check future match
             future = data["matches"][1]
             self.assertFalse(future["is_finished"])
             self.assertIsNone(future["score"])
+            self.assertIsNone(future["score_home"])
+            self.assertIsNone(future["score_away"])
             self.assertEqual(future["location"], "Sports Hall")
 

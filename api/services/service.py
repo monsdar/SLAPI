@@ -255,6 +255,27 @@ class TeamSLService:
             result = match.get("result")
             score = result if result else None
             
+            # Parse score into home and away components
+            score_home = None
+            score_away = None
+            if score:
+                try:
+                    # Score format is typically "100:50" or "76-64"
+                    # Try colon separator first, then dash
+                    if ':' in score:
+                        parts = score.split(':')
+                    elif '-' in score:
+                        parts = score.split('-')
+                    else:
+                        parts = []
+                    
+                    if len(parts) == 2:
+                        score_home = int(parts[0].strip())
+                        score_away = int(parts[1].strip())
+                except (ValueError, AttributeError):
+                    # If parsing fails, leave as None
+                    pass
+            
             # Determine match status
             is_finished = result is not None and result != ""
             is_confirmed = match.get("ergebnisbestaetigt", False)
@@ -288,6 +309,8 @@ class TeamSLService:
                 "away_team": away_team,
                 "location": location,
                 "score": score,
+                "score_home": score_home,
+                "score_away": score_away,
                 "is_finished": is_finished,
                 "is_confirmed": is_confirmed,
                 "is_cancelled": is_cancelled,
