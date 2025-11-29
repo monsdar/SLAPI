@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
+from zoneinfo import ZoneInfo
 
 from django.test import TestCase, SimpleTestCase, override_settings
 
@@ -424,6 +425,9 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
         self.assertEqual(first["match_day"], 1)
         self.assertEqual(first["match_no"], 8303)
         self.assertIsInstance(first["datetime"], datetime)
+        # Verify timezone-aware datetime with Europe/Berlin timezone
+        self.assertIsNotNone(first["datetime"].tzinfo)
+        self.assertEqual(first["datetime"].tzinfo, ZoneInfo("Europe/Berlin"))
         self.assertEqual(first["datetime"].strftime("%Y-%m-%d %H:%M"), "2025-09-13 09:00")
         self.assertEqual(first["home_team"]["name"], "TuS Huchting")
         self.assertEqual(first["home_team"]["club_id"], 153)
@@ -439,6 +443,9 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
         second = result["matches"][1]
         self.assertEqual(second["match_id"], 2688137)
         self.assertIsInstance(second["datetime"], datetime)
+        # Verify timezone-aware datetime with Europe/Berlin timezone
+        self.assertIsNotNone(second["datetime"].tzinfo)
+        self.assertEqual(second["datetime"].tzinfo, ZoneInfo("Europe/Berlin"))
         self.assertEqual(second["datetime"].strftime("%Y-%m-%d %H:%M"), "2025-09-20 18:00")
         self.assertIsNone(second["score"])
         self.assertIsNone(second["score_home"])
@@ -755,6 +762,9 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
         self.assertEqual(len(result["matches"]), 1)
         match = result["matches"][0]
         self.assertIsInstance(match["datetime"], datetime)
+        # Verify timezone-aware datetime with Europe/Berlin timezone
+        self.assertIsNotNone(match["datetime"].tzinfo)
+        self.assertEqual(match["datetime"].tzinfo, ZoneInfo("Europe/Berlin"))
         self.assertEqual(match["datetime"].strftime("%Y-%m-%d"), "2025-09-13")
 
     def test_normalize_matches_parses_score_with_colon(self):
@@ -1142,7 +1152,7 @@ class MatchesEndpointTests(TestCase):
                         "match_id": 2688136,
                         "match_day": 1,
                         "match_no": 8303,
-                        "datetime": datetime(2025, 9, 13, 9, 0),
+                        "datetime": datetime(2025, 9, 13, 9, 0, tzinfo=ZoneInfo("Europe/Berlin")),
                         "home_team": {
                             "id": "2000",
                             "name": "Home Team",
@@ -1172,6 +1182,10 @@ class MatchesEndpointTests(TestCase):
             self.assertEqual(len(data["matches"]), 1)
             self.assertEqual(data["matches"][0]["match_id"], 2688136)
             self.assertEqual(data["matches"][0]["match_day"], 1)
+            # Verify datetime includes timezone information in ISO format
+            datetime_str = data["matches"][0]["datetime"]
+            self.assertIn("+", datetime_str or "", msg="Datetime should include timezone offset")
+            self.assertIn("2025-09-13T09:00", datetime_str, msg="Datetime should include date and time")
             self.assertEqual(data["matches"][0]["home_team"]["name"], "Home Team")
             self.assertEqual(data["matches"][0]["away_team"]["name"], "Away Team")
             self.assertEqual(data["matches"][0]["score"], "76:64")
@@ -1203,7 +1217,7 @@ class MatchesEndpointTests(TestCase):
                         "match_id": 1,
                         "match_day": 1,
                         "match_no": 1,
-                        "datetime": datetime(2025, 9, 13, 9, 0),
+                        "datetime": datetime(2025, 9, 13, 9, 0, tzinfo=ZoneInfo("Europe/Berlin")),
                         "home_team": {"id": "1", "name": "Home Team"},
                         "away_team": {"id": "2", "name": "Away Team"},
                         "location": None,
@@ -1218,7 +1232,7 @@ class MatchesEndpointTests(TestCase):
                         "match_id": 2,
                         "match_day": 2,
                         "match_no": 2,
-                        "datetime": datetime(2025, 10, 1, 18, 0),
+                        "datetime": datetime(2025, 10, 1, 18, 0, tzinfo=ZoneInfo("Europe/Berlin")),
                         "home_team": {"id": "3", "name": "Future Home"},
                         "away_team": {"id": "4", "name": "Future Away"},
                         "location": None,  # Location is not included by default
@@ -1261,7 +1275,7 @@ class MatchesEndpointTests(TestCase):
                 "match_id": 2708876,
                 "match_day": 1,
                 "match_no": 2101,
-                "datetime": datetime(2025, 9, 14, 16, 0),
+                "datetime": datetime(2025, 9, 14, 16, 0, tzinfo=ZoneInfo("Europe/Berlin")),
                 "home_team": {
                     "id": "406405",
                     "name": "TuS Hohnstorf/Elbe I",
@@ -1288,6 +1302,10 @@ class MatchesEndpointTests(TestCase):
             self.assertEqual(response.status_code, 200)
             data = response.json()
             self.assertEqual(data["match_id"], 2708876)
+            # Verify datetime includes timezone information in ISO format
+            datetime_str = data["datetime"]
+            self.assertIn("+", datetime_str or "", msg="Datetime should include timezone offset")
+            self.assertIn("2025-09-14T16:00", datetime_str, msg="Datetime should include date and time")
             self.assertEqual(data["location"], "Grundschule Hohnstorf")
             self.assertEqual(data["score"], "61:77")
             self.assertEqual(data["home_team"]["name"], "TuS Hohnstorf/Elbe I")
@@ -1301,7 +1319,7 @@ class MatchesEndpointTests(TestCase):
                 "match_id": 2708876,
                 "match_day": 1,
                 "match_no": 2101,
-                "datetime": datetime(2025, 9, 14, 16, 0),
+                "datetime": datetime(2025, 9, 14, 16, 0, tzinfo=ZoneInfo("Europe/Berlin")),
                 "home_team": {"id": "1", "name": "Home Team"},
                 "away_team": {"id": "2", "name": "Away Team"},
                 "location": None,

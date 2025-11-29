@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from .cache import FileCache
 from .client import TeamSLClient
@@ -265,6 +266,9 @@ class TeamSLService:
             match_no = match.get("matchNo", 0)
             
             # Parse datetime from kickoffDate and kickoffTime
+            # DBB returns times in CET/CEST (Central European Time), which is Europe/Berlin timezone
+            # Using Europe/Berlin automatically handles the CET/CEST transition
+            berlin_tz = ZoneInfo("Europe/Berlin")
             kickoff_date = match.get("kickoffDate", "")
             kickoff_time = match.get("kickoffTime", "")
             match_datetime = None
@@ -274,17 +278,21 @@ class TeamSLService:
                     try:
                         # Combine date and time, format is typically "YYYY-MM-DD" and "HH:MM"
                         datetime_str = f"{kickoff_date} {kickoff_time}"
-                        match_datetime = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
+                        # Parse as naive datetime first, then localize to Europe/Berlin timezone
+                        naive_datetime = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
+                        match_datetime = naive_datetime.replace(tzinfo=berlin_tz)
                     except (ValueError, TypeError):
                         # If parsing fails, try with just the date
                         try:
-                            match_datetime = datetime.strptime(kickoff_date, "%Y-%m-%d")
+                            naive_datetime = datetime.strptime(kickoff_date, "%Y-%m-%d")
+                            match_datetime = naive_datetime.replace(tzinfo=berlin_tz)
                         except (ValueError, TypeError):
                             pass
                 else:
                     # Only date provided, no time
                     try:
-                        match_datetime = datetime.strptime(kickoff_date, "%Y-%m-%d")
+                        naive_datetime = datetime.strptime(kickoff_date, "%Y-%m-%d")
+                        match_datetime = naive_datetime.replace(tzinfo=berlin_tz)
                     except (ValueError, TypeError):
                         pass
             
