@@ -109,6 +109,41 @@ class TeamSLClient:
         
         return data
 
+    def fetch_match_info(self, match_id: int) -> Dict[str, Any]:
+        """
+        Fetch detailed match information including location (spielfeld) for a specific match.
+        
+        Args:
+            match_id: The match ID to fetch information for.
+        
+        Returns:
+            Raw response dictionary from the API.
+        
+        Raises:
+            httpx.HTTPError: If the request fails.
+        """
+        endpoint = f"/rest/match/id/{match_id}/matchInfo"
+        logger.info("fetch_match_info called for match_id=%s, endpoint=%s", match_id, endpoint)
+        
+        response = self._client.get(endpoint)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Validate response structure - convert status to int for consistent comparison
+        status = data.get("status")
+        try:
+            status_int = int(status) if status is not None else None
+        except (ValueError, TypeError):
+            status_int = None
+        
+        if status_int != 0:
+            error_msg = data.get("message", "Unknown error")
+            logger.error("API returned non-zero status: %s, message: %s", status, error_msg)
+            raise ValueError(f"API error: {error_msg}")
+        
+        return data
+
     def fetch_associations(self) -> Dict[str, Any]:
         """
         Fetch the list of Verbände (associations) from the upstream API.

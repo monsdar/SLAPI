@@ -19,7 +19,7 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
             def __init__(self):
                 self.call_count = 0
 
-            def fetch_matches(self, league_id):
+            def fetch_matches(self, league_id, use_cache=True):
                 self.call_count += 1
                 return {
                     "status": 0,
@@ -49,6 +49,18 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
                     }
                 }
 
+            def fetch_match_info(self, match_id, use_cache=True):
+                # Return empty spielfeld for old tests (no location)
+                return {
+                    "status": 0,
+                    "data": {
+                        "matchId": match_id,
+                        "matchInfo": {
+                            "spielfeld": {}
+                        }
+                    }
+                }
+
         with TemporaryDirectory() as directory:
             cache = FileCache(Path(directory))
             client = DummyClient()
@@ -67,7 +79,7 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
             def __init__(self):
                 self.call_count = 0
 
-            def fetch_matches(self, league_id):
+            def fetch_matches(self, league_id, use_cache=True):
                 self.call_count += 1
                 return {
                     "status": 0,
@@ -86,6 +98,18 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
                     }
                 }
 
+            def fetch_match_info(self, match_id, use_cache=True):
+                # Return empty spielfeld for old tests (no location)
+                return {
+                    "status": 0,
+                    "data": {
+                        "matchId": match_id,
+                        "matchInfo": {
+                            "spielfeld": {}
+                        }
+                    }
+                }
+
         with TemporaryDirectory() as directory:
             cache = FileCache(Path(directory))
             client = DummyClient()
@@ -96,6 +120,126 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
 
             self.assertNotEqual(first["matches"][0]["match_id"], second["matches"][0]["match_id"])
             self.assertEqual(client.call_count, 2)
+
+    def test_get_matches_fetches_match_info_for_location(self):
+        """Test that get_matches fetches match info to extract location."""
+        class DummyClient:
+            def __init__(self):
+                self.fetch_matches_call_count = 0
+                self.fetch_match_info_call_count = 0
+
+            def fetch_matches(self, league_id, use_cache=True):
+                self.fetch_matches_call_count += 1
+                return {
+                    "status": 0,
+                    "data": {
+                        "matches": [
+                            {
+                                "matchId": 2708876,
+                                "matchDay": 1,
+                                "matchNo": 2101,
+                                "kickoffDate": "2025-09-14",
+                                "kickoffTime": "16:00",
+                                "homeTeam": {
+                                    "teamname": "TuS Hohnstorf/Elbe I",
+                                    "clubId": 927,
+                                    "seasonTeamId": 406405,
+                                },
+                                "guestTeam": {
+                                    "teamname": "TV Falkenberg",
+                                    "clubId": 2606,
+                                    "seasonTeamId": 415879,
+                                },
+                                "result": "61:77",
+                                "ergebnisbestaetigt": True,
+                                "abgesagt": False,
+                            }
+                        ]
+                    }
+                }
+
+            def fetch_match_info(self, match_id, use_cache=True):
+                self.fetch_match_info_call_count += 1
+                return {
+                    "status": 0,
+                    "data": {
+                        "matchId": match_id,
+                        "matchInfo": {
+                            "spielfeld": {
+                                "id": 214,
+                                "bezeichnung": "Grundschule Hohnstorf",
+                                "strasse": "Schulstr./Elbdeich",
+                                "plz": "21522",
+                                "ort": "Hohnstorf/Elbe"
+                            }
+                        }
+                    }
+                }
+
+        with TemporaryDirectory() as directory:
+            cache = FileCache(Path(directory))
+            client = DummyClient()
+            service = TeamSLService(cache=cache, client=client)
+
+            result = service.get_matches("48693")
+
+            self.assertEqual(client.fetch_matches_call_count, 1)
+            self.assertEqual(client.fetch_match_info_call_count, 1)
+            self.assertEqual(len(result["matches"]), 1)
+            self.assertEqual(result["matches"][0]["location"], "Grundschule Hohnstorf")
+
+    def test_get_matches_handles_match_info_fetch_failure_gracefully(self):
+        """Test that get_matches handles match info fetch failures gracefully."""
+        class DummyClient:
+            def __init__(self):
+                self.fetch_matches_call_count = 0
+                self.fetch_match_info_call_count = 0
+
+            def fetch_matches(self, league_id, use_cache=True):
+                self.fetch_matches_call_count += 1
+                return {
+                    "status": 0,
+                    "data": {
+                        "matches": [
+                            {
+                                "matchId": 2708876,
+                                "matchDay": 1,
+                                "matchNo": 2101,
+                                "kickoffDate": "2025-09-14",
+                                "kickoffTime": "16:00",
+                                "homeTeam": {
+                                    "teamname": "TuS Hohnstorf/Elbe I",
+                                    "clubId": 927,
+                                },
+                                "guestTeam": {
+                                    "teamname": "TV Falkenberg",
+                                    "clubId": 2606,
+                                },
+                                "result": None,
+                                "ergebnisbestaetigt": False,
+                                "abgesagt": False,
+                            }
+                        ]
+                    }
+                }
+
+            def fetch_match_info(self, match_id, use_cache=True):
+                self.fetch_match_info_call_count += 1
+                raise ValueError("Match not found")
+
+        with TemporaryDirectory() as directory:
+            cache = FileCache(Path(directory))
+            client = DummyClient()
+            service = TeamSLService(cache=cache, client=client)
+
+            # Should not raise an exception, but location should be None
+            result = service.get_matches("48693")
+
+            self.assertEqual(client.fetch_matches_call_count, 1)
+            # RetryClient will retry 3 times + 1 initial = 4 total attempts
+            self.assertEqual(client.fetch_match_info_call_count, 4)
+            self.assertEqual(len(result["matches"]), 1)
+            self.assertIsNone(result["matches"][0]["location"])
 
     def test_normalize_matches_extracts_all_fields(self):
         """Test that normalization extracts all expected fields from API response."""
@@ -179,6 +323,80 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
         self.assertIsNone(second["score_away"])
         self.assertFalse(second["is_finished"])
         self.assertFalse(second["is_confirmed"])
+
+    def test_normalize_matches_extracts_location_from_match_locations(self):
+        """Test that normalization extracts location from match_locations parameter."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 2708876,
+                        "matchDay": 1,
+                        "matchNo": 2101,
+                        "kickoffDate": "2025-09-14",
+                        "kickoffTime": "16:00",
+                        "homeTeam": {
+                            "teamname": "TuS Hohnstorf/Elbe I",
+                            "clubId": 927,
+                            "seasonTeamId": 406405,
+                        },
+                        "guestTeam": {
+                            "teamname": "TV Falkenberg",
+                            "clubId": 2606,
+                            "seasonTeamId": 415879,
+                        },
+                        "result": "61:77",
+                        "ergebnisbestaetigt": True,
+                        "abgesagt": False,
+                    }
+                ]
+            }
+        }
+
+        match_locations = {2708876: "Grundschule Hohnstorf"}
+        result = TeamSLService._normalize_matches(raw_data, "48693", match_locations=match_locations)
+
+        self.assertEqual(len(result["matches"]), 1)
+        match = result["matches"][0]
+        self.assertEqual(match["location"], "Grundschule Hohnstorf")
+
+    def test_normalize_matches_falls_back_to_match_data_if_location_not_in_match_locations(self):
+        """Test that normalization falls back to match data if location not in match_locations."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 2708876,
+                        "matchDay": 1,
+                        "matchNo": 2101,
+                        "kickoffDate": "2025-09-14",
+                        "kickoffTime": "16:00",
+                        "homeTeam": {
+                            "teamname": "TuS Hohnstorf/Elbe I",
+                            "clubId": 927,
+                        },
+                        "guestTeam": {
+                            "teamname": "TV Falkenberg",
+                            "clubId": 2606,
+                        },
+                        "result": None,
+                        "ergebnisbestaetigt": False,
+                        "abgesagt": False,
+                        "spielfeld": "Fallback Location",
+                    }
+                ]
+            }
+        }
+
+        # Empty match_locations - should fall back to match data
+        match_locations = {}
+        result = TeamSLService._normalize_matches(raw_data, "48693", match_locations=match_locations)
+
+        self.assertEqual(len(result["matches"]), 1)
+        match = result["matches"][0]
+        self.assertEqual(match["location"], "Fallback Location")
 
     def test_normalize_matches_handles_missing_fields(self):
         """Test that normalization handles missing optional fields gracefully."""
@@ -609,6 +827,60 @@ class TeamSLClientMatchesTests(SimpleTestCase):
         # Should not raise an error even though status is a string "0"
         self.assertEqual(result["status"], "0")
         self.assertIn("data", result)
+
+    @patch('api.services.client.httpx.Client')
+    def test_fetch_match_info_makes_correct_request(self, mock_client_class):
+        """Test that fetch_match_info makes the correct HTTP request."""
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "status": 0,
+            "data": {
+                "matchId": 2708876,
+                "matchInfo": {
+                    "spielfeld": {
+                        "id": 214,
+                        "bezeichnung": "Grundschule Hohnstorf",
+                        "strasse": "Schulstr./Elbdeich",
+                        "plz": "21522",
+                        "ort": "Hohnstorf/Elbe"
+                    }
+                }
+            }
+        }
+        mock_response.raise_for_status = Mock()
+
+        mock_client_instance = Mock()
+        mock_client_instance.get.return_value = mock_response
+        mock_client_class.return_value = mock_client_instance
+
+        client = TeamSLClient(base_url="https://www.basketball-bund.net")
+        result = client.fetch_match_info(2708876)
+
+        mock_client_instance.get.assert_called_once_with("/rest/match/id/2708876/matchInfo")
+        self.assertEqual(result["status"], 0)
+        self.assertEqual(result["data"]["matchInfo"]["spielfeld"]["bezeichnung"], "Grundschule Hohnstorf")
+
+    @patch('api.services.client.httpx.Client')
+    def test_fetch_match_info_raises_on_non_zero_status(self, mock_client_class):
+        """Test that fetch_match_info raises ValueError on API error."""
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "status": 1,
+            "message": "Match not found"
+        }
+        mock_response.raise_for_status = Mock()
+
+        mock_client_instance = Mock()
+        mock_client_instance.get.return_value = mock_response
+        mock_client_class.return_value = mock_client_instance
+
+        client = TeamSLClient(base_url="https://www.basketball-bund.net")
+
+        with self.assertRaises(ValueError) as context:
+            client.fetch_match_info(99999)
+
+        self.assertIn("API error", str(context.exception))
+        self.assertIn("Match not found", str(context.exception))
 
 
 @override_settings(SLAPI_API_TOKEN=None)

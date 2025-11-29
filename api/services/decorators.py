@@ -34,6 +34,10 @@ class ClientProtocol(Protocol):
         """Fetch leagues for a specific club from the upstream API."""
         ...
 
+    def fetch_match_info(self, match_id: int) -> Dict[str, Any]:
+        """Fetch detailed match information including location for a specific match."""
+        ...
+
 
 class CachedClient:
     """
@@ -189,6 +193,34 @@ class CachedClient:
         if use_cache:
             self._cache.write(cache_key, result)
 
+        return result
+
+    def fetch_match_info(self, match_id: int, use_cache: bool = True, **kwargs: Any) -> Dict[str, Any]:
+        """
+        Fetch match info with caching support.
+        
+        Args:
+            match_id: The match ID to fetch info for.
+            use_cache: If True, check cache first and store results. If False, bypass cache.
+            **kwargs: Additional arguments (ignored, but kept for compatibility with decorator chain).
+        
+        Returns:
+            Dictionary containing match info data.
+        """
+        cache_key = f"match_info_{match_id}"
+        
+        if use_cache:
+            cached = self._cache.read(cache_key)
+            if cached is not None:
+                logger.debug("Cache hit for key: %s", cache_key)
+                return cached
+        
+        logger.debug("Cache miss for key: %s, fetching from client", cache_key)
+        result = self._client.fetch_match_info(match_id)
+        
+        if use_cache:
+            self._cache.write(cache_key, result)
+        
         return result
 
 
@@ -351,6 +383,22 @@ class RetryClient:
             retryable_exceptions=(ConnectionError, TimeoutError, Exception),
         )
 
+    def fetch_match_info(self, match_id: int, **kwargs: Any) -> Dict[str, Any]:
+        """
+        Fetch match info with retry and throttling support.
+        
+        Args:
+            match_id: The match ID to fetch info for.
+            **kwargs: Additional arguments passed through to the underlying client.
+        
+        Returns:
+            Dictionary containing match info data.
+        """
+        return self._retry_with_backoff(
+            lambda: self._client.fetch_match_info(match_id),
+            retryable_exceptions=(ConnectionError, TimeoutError, Exception),
+        )
+
 
 class TransformClient:
     """
@@ -437,6 +485,22 @@ class TransformClient:
             Transformed list of league dictionaries.
         """
         result = self._client.fetch_club_leagues(club_name, verband_id, **kwargs)
+        # Placeholder for future transformation logic
+        # For now, just pass through
+        return result
+
+    def fetch_match_info(self, match_id: int, **kwargs: Any) -> Dict[str, Any]:
+        """
+        Fetch match info with transformation support.
+        
+        Args:
+            match_id: The match ID to fetch info for.
+            **kwargs: Additional arguments passed through to the underlying client.
+        
+        Returns:
+            Transformed match info dictionary.
+        """
+        result = self._client.fetch_match_info(match_id, **kwargs)
         # Placeholder for future transformation logic
         # For now, just pass through
         return result
@@ -583,5 +647,27 @@ class MetricsClient:
                 club_name,
                 verband_id,
             )
+            raise
+
+    def fetch_match_info(self, match_id: int, **kwargs: Any) -> Dict[str, Any]:
+        """
+        Fetch match info with metrics collection.
+        
+        Args:
+            match_id: The match ID to fetch info for.
+            **kwargs: Passed through to the underlying client.
+        
+        Returns:
+            Dictionary containing match info data.
+        """
+        start_time = time.time()
+        try:
+            result = self._client.fetch_match_info(match_id, **kwargs)
+            duration = time.time() - start_time
+            logger.debug("fetch_match_info completed in %.3f seconds for match_id=%s", duration, match_id)
+            return result
+        except Exception:
+            duration = time.time() - start_time
+            logger.debug("fetch_match_info failed after %.3f seconds for match_id=%s", duration, match_id)
             raise
 

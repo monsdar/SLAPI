@@ -60,6 +60,53 @@ Source: [basketball-bund.net](https://www.basketball-bund.net/rest/competition/a
 
 ---
 
+### `GET /rest/match/id/{matchId}/matchInfo`
+Returns detailed information about a specific match, including venue location, match statistics, and referee assignments.
+
+#### Response shape
+
+```json
+{
+  "timestamp": "2025-11-29T07:48:57+0100",
+  "status": "0",
+  "message": "",
+  "data": {
+    "matchId": 2708876,
+    "matchDay": 1,
+    "matchNo": 2101,
+    "kickoffDate": "2025-09-14",
+    "kickoffTime": "16:00",
+    "homeTeam": { "teamname": "TuS Hohnstorf/Elbe I", ... },
+    "guestTeam": { "teamname": "TV Falkenberg", ... },
+    "result": "61:77",
+    "ergebnisbestaetigt": true,
+    "matchInfo": {
+      "spielfeld": {
+        "id": 214,
+        "bezeichnung": "Grundschule Hohnstorf",
+        "strasse": "Schulstr./Elbdeich",
+        "plz": "21522",
+        "ort": "Hohnstorf/Elbe"
+      },
+      "topPerformances": [ ... ],
+      "srList": [ ... ]
+    },
+    "... additional fields ..."
+  }
+}
+```
+
+Key points:
+
+- `data.matchInfo.spielfeld.bezeichnung` contains the venue/location name (e.g., "Grundschule Hohnstorf"). This is the primary field for extracting match location.
+- `data.matchInfo.spielfeld` also includes address details (`strasse`, `plz`, `ort`) for more complete location information.
+- The endpoint provides additional match details including top performances and referee assignments (`srList`).
+- This endpoint is essential for obtaining match location information, as the schedule endpoint (`/rest/competition/spielplan/id/{ligaId}`) does not include location data in the match objects.
+
+Source: [basketball-bund.net](https://www.basketball-bund.net/rest/match/id/2708876/matchInfo)
+
+---
+
 ### `POST /rest/wam/data`
 Backend used by the Angular/SPA league finder. A plain `GET` returns HTTP 405 (Method Not Allowed); requests must be JSON `POST`s with `Content-Type: application/json`.
 

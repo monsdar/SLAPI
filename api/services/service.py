@@ -86,7 +86,32 @@ class TeamSLService:
             Dictionary containing normalized matches data with league_id and matches list.
         """
         raw_data = self._decorated_client.fetch_matches(league_id, use_cache=use_cache)
-        matches = self._normalize_matches(raw_data, league_id)
+        
+        # Fetch match info for each match to get location data
+        # Extract match IDs from the raw data
+        data = raw_data.get("data", {})
+        matches = data.get("matches", [])
+        match_locations = {}
+        
+        for match in matches:
+            match_id = match.get("matchId")
+            if match_id:
+                try:
+                    match_info = self._decorated_client.fetch_match_info(match_id, use_cache=use_cache)
+                    # Extract location from matchInfo.spielfeld.bezeichnung
+                    match_data = match_info.get("data", {})
+                    match_info_data = match_data.get("matchInfo", {})
+                    spielfeld = match_info_data.get("spielfeld", {})
+                    location = spielfeld.get("bezeichnung")
+                    if location:
+                        match_locations[match_id] = location
+                except Exception as e:
+                    # Log but don't fail if match info fetch fails
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning("Failed to fetch match info for match_id=%s: %s", match_id, str(e))
+        
+        matches = self._normalize_matches(raw_data, league_id, match_locations=match_locations)
         return matches
 
     def get_associations(self, use_cache: bool = True) -> List[Dict[str, Any]]:
@@ -186,17 +211,20 @@ class TeamSLService:
         }
 
     @staticmethod
-    def _normalize_matches(raw_data: Dict[str, Any], league_id: str) -> Dict[str, Any]:
+    def _normalize_matches(raw_data: Dict[str, Any], league_id: str, match_locations: Optional[Dict[int, str]] = None) -> Dict[str, Any]:
         """
         Normalize raw matches data from the upstream API into our schema format.
         
         Args:
             raw_data: Raw response from the API containing data.matches
             league_id: The league ID for the matches
+            match_locations: Optional dictionary mapping match_id to location string
         
         Returns:
             Dictionary with league_id and normalized matches list.
         """
+        if match_locations is None:
+            match_locations = {}
         data = raw_data.get("data", {})
         matches = data.get("matches", [])
         
@@ -291,14 +319,17 @@ class TeamSLService:
                 away_team_data.get("verzicht", False)
             )
             
-            # Extract location if available (check common field names)
-            location = (
-                match.get("spielfeld") or
-                match.get("halle") or
-                match.get("location") or
-                match.get("venue") or
-                None
-            )
+            # Extract location - first try from match_locations (fetched from matchInfo endpoint),
+            # then fall back to match data fields
+            location = match_locations.get(match_id)
+            if not location:
+                location = (
+                    match.get("spielfeld") or
+                    match.get("halle") or
+                    match.get("location") or
+                    match.get("venue") or
+                    None
+                )
             
             normalized_match = {
                 "match_id": match_id,
