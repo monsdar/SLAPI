@@ -78,6 +78,9 @@ class TeamSLService:
         """
         Fetch matches for a league with all decorators applied (caching, retries, metrics, etc.).
         
+        Note: This endpoint does not include location information by default to improve performance.
+        Use the /match/{id} endpoint to get detailed match information including location.
+        
         Args:
             league_id: The league ID to fetch matches for.
             use_cache: If True, check cache first and store results. If False, bypass cache.
@@ -86,36 +89,59 @@ class TeamSLService:
             Dictionary containing normalized matches data with league_id and matches list.
         """
         raw_data = self._decorated_client.fetch_matches(league_id, use_cache=use_cache)
-        
-        # Fetch match info for each match to get location data
-        # Extract match IDs from the raw data
-        data = raw_data.get("data", {})
-        matches = data.get("matches", [])
-        match_locations = {}
-        
-        for match in matches:
-            match_id = match.get("matchId")
-            if match_id:
-                try:
-                    match_info = self._decorated_client.fetch_match_info(match_id, use_cache=use_cache)
-                    # Extract location from matchInfo.spielfeld.bezeichnung
-                    # Handle None values - .get() only uses default if key is missing, not if value is None
-                    if not match_info:
-                        continue
-                    match_data = match_info.get("data") or {}
-                    match_info_data = match_data.get("matchInfo") or {}
-                    spielfeld = match_info_data.get("spielfeld") or {}
-                    location = spielfeld.get("bezeichnung")
-                    if location:
-                        match_locations[match_id] = location
-                except Exception as e:
-                    # Log but don't fail if match info fetch fails
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.warning("Failed to fetch match info for match_id=%s: %s", match_id, str(e))
-        
-        matches = self._normalize_matches(raw_data, league_id, match_locations=match_locations)
+        matches = self._normalize_matches(raw_data, league_id, match_locations={})
         return matches
+
+    def get_match(self, match_id: int, use_cache: bool = True) -> Dict[str, Any]:
+        """
+        Fetch detailed information for a specific match including location.
+        
+        Args:
+            match_id: The match ID to fetch information for.
+            use_cache: If True, check cache first and store results. If False, bypass cache.
+        
+        Returns:
+            Dictionary containing normalized match data with full details including location.
+        
+        Raises:
+            ValueError: If the match is not found or the API returns an error.
+        """
+        match_info = self._decorated_client.fetch_match_info(match_id, use_cache=use_cache)
+        
+        # Extract location from matchInfo.spielfeld.bezeichnung
+        match_data = match_info.get("data") or {}
+        
+        # Check if we have valid match data (at minimum we need matchId)
+        if not match_data.get("matchId"):
+            raise ValueError(f"Match {match_id} not found or could not be normalized")
+        
+        match_info_data = match_data.get("matchInfo") or {}
+        spielfeld = match_info_data.get("spielfeld") or {}
+        location = spielfeld.get("bezeichnung")
+        
+        # Create match_locations dict with the location for this match
+        match_locations = {}
+        if location:
+            match_locations[match_id] = location
+        
+        # The matchInfo response contains the match data at data.* (matchId, matchDay, etc.)
+        # We need to construct a matches-like structure for normalization
+        # Create a fake "matches" structure with a single match
+        fake_matches_response = {
+            "status": match_info.get("status", 0),
+            "data": {
+                "matches": [match_data]  # The match data is at the top level of data
+            }
+        }
+        
+        # Normalize using the existing method (league_id is not needed for single match)
+        normalized = self._normalize_matches(fake_matches_response, league_id="", match_locations=match_locations)
+        
+        # Return just the single match (not wrapped in a list)
+        if normalized["matches"]:
+            return normalized["matches"][0]
+        else:
+            raise ValueError(f"Match {match_id} not found or could not be normalized")
 
     def get_associations(self, use_cache: bool = True) -> List[Dict[str, Any]]:
         """

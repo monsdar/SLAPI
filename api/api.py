@@ -90,8 +90,11 @@ def get_matches(request, league_id: str, use_cache: bool = True):
     
     The matches are returned as a list containing all matches in the season,
     including both finished matches (with scores) and scheduled future matches.
-    Each match includes the datetime, home and away teams, location (if available),
-    and status information (finished, confirmed, cancelled).
+    Each match includes the datetime, home and away teams, and status information
+    (finished, confirmed, cancelled).
+    
+    Note: Location information is not included by default to improve performance.
+    Use the /match/{id} endpoint to get detailed match information including location.
     """
     data = service.get_matches(league_id, use_cache=use_cache)
     
@@ -116,6 +119,41 @@ def get_matches(request, league_id: str, use_cache: bool = True):
     ]
     
     return MatchListResponse(league_id=data["league_id"], matches=matches)
+
+
+@api.get("/match/{match_id}", response=Match, tags=["matches"], auth=auth)
+def get_match(request, match_id: int, use_cache: bool = True):
+    """
+    Return detailed information for a specific match including location.
+    
+    This endpoint fetches comprehensive match information including the venue location,
+    which is not included in the /leagues/{league_id}/matches endpoint by default.
+    
+    Args:
+        match_id: The match ID to fetch information for.
+        use_cache: If True, check cache first and store results. If False, bypass cache.
+    
+    Returns:
+        Match object with full details including location.
+    """
+    match_data = service.get_match(match_id, use_cache=use_cache)
+    
+    # Convert nested dictionaries to schema objects
+    return Match(
+        match_id=match_data["match_id"],
+        match_day=match_data["match_day"],
+        match_no=match_data["match_no"],
+        datetime=match_data["datetime"],
+        home_team=Team(**match_data["home_team"]),
+        away_team=Team(**match_data["away_team"]),
+        location=match_data["location"],
+        score=match_data["score"],
+        score_home=match_data["score_home"],
+        score_away=match_data["score_away"],
+        is_finished=match_data["is_finished"],
+        is_confirmed=match_data["is_confirmed"],
+        is_cancelled=match_data["is_cancelled"],
+    )
 
 
 @api.get("/clubs/{club_name}/leagues", response=ClubLeaguesResponse, tags=["clubs"], auth=auth)

@@ -121,8 +121,8 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
             self.assertNotEqual(first["matches"][0]["match_id"], second["matches"][0]["match_id"])
             self.assertEqual(client.call_count, 2)
 
-    def test_get_matches_fetches_match_info_for_location(self):
-        """Test that get_matches fetches match info to extract location."""
+    def test_get_matches_does_not_fetch_match_info(self):
+        """Test that get_matches does not fetch match info (location is None by default)."""
         class DummyClient:
             def __init__(self):
                 self.fetch_matches_call_count = 0
@@ -184,12 +184,14 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
             result = service.get_matches("48693")
 
             self.assertEqual(client.fetch_matches_call_count, 1)
-            self.assertEqual(client.fetch_match_info_call_count, 1)
+            # Should NOT fetch match info anymore
+            self.assertEqual(client.fetch_match_info_call_count, 0)
             self.assertEqual(len(result["matches"]), 1)
-            self.assertEqual(result["matches"][0]["location"], "Grundschule Hohnstorf")
+            # Location should be None since we don't fetch match info
+            self.assertIsNone(result["matches"][0]["location"])
 
-    def test_get_matches_handles_match_info_fetch_failure_gracefully(self):
-        """Test that get_matches handles match info fetch failures gracefully."""
+    def test_get_matches_does_not_call_match_info(self):
+        """Test that get_matches does not call fetch_match_info at all."""
         class DummyClient:
             def __init__(self):
                 self.fetch_matches_call_count = 0
@@ -232,17 +234,17 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
             client = DummyClient()
             service = TeamSLService(cache=cache, client=client)
 
-            # Should not raise an exception, but location should be None
+            # Should not raise an exception, and should not call fetch_match_info
             result = service.get_matches("48693")
 
             self.assertEqual(client.fetch_matches_call_count, 1)
-            # RetryClient will retry 3 times + 1 initial = 4 total attempts
-            self.assertEqual(client.fetch_match_info_call_count, 4)
+            # Should NOT call fetch_match_info at all
+            self.assertEqual(client.fetch_match_info_call_count, 0)
             self.assertEqual(len(result["matches"]), 1)
             self.assertIsNone(result["matches"][0]["location"])
 
-    def test_get_matches_handles_none_match_info_gracefully(self):
-        """Test that get_matches handles matchInfo being None gracefully."""
+    def test_get_matches_does_not_call_match_info_for_none_match_info(self):
+        """Test that get_matches does not call match_info (location handling is now in get_match)."""
         class DummyClient:
             def __init__(self):
                 self.fetch_matches_call_count = 0
@@ -278,12 +280,11 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
 
             def fetch_match_info(self, match_id, use_cache=True):
                 self.fetch_match_info_call_count += 1
-                # Simulate API response where matchInfo is explicitly None
                 return {
                     "status": 0,
                     "data": {
                         "matchId": match_id,
-                        "matchInfo": None  # This is the problematic case
+                        "matchInfo": None
                     }
                 }
 
@@ -292,16 +293,17 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
             client = DummyClient()
             service = TeamSLService(cache=cache, client=client)
 
-            # Should not raise an exception, but location should be None
+            # Should not raise an exception, and should not call fetch_match_info
             result = service.get_matches("48693")
 
             self.assertEqual(client.fetch_matches_call_count, 1)
-            self.assertEqual(client.fetch_match_info_call_count, 1)
+            # Should NOT call fetch_match_info anymore
+            self.assertEqual(client.fetch_match_info_call_count, 0)
             self.assertEqual(len(result["matches"]), 1)
             self.assertIsNone(result["matches"][0]["location"])
 
-    def test_get_matches_handles_none_spielfeld_gracefully(self):
-        """Test that get_matches handles spielfeld being None gracefully."""
+    def test_get_matches_does_not_call_match_info_for_none_spielfeld(self):
+        """Test that get_matches does not call match_info (spielfeld handling is now in get_match)."""
         class DummyClient:
             def __init__(self):
                 self.fetch_matches_call_count = 0
@@ -337,13 +339,12 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
 
             def fetch_match_info(self, match_id, use_cache=True):
                 self.fetch_match_info_call_count += 1
-                # Simulate API response where spielfeld is explicitly None
                 return {
                     "status": 0,
                     "data": {
                         "matchId": match_id,
                         "matchInfo": {
-                            "spielfeld": None  # This is another problematic case
+                            "spielfeld": None
                         }
                     }
                 }
@@ -353,11 +354,12 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
             client = DummyClient()
             service = TeamSLService(cache=cache, client=client)
 
-            # Should not raise an exception, but location should be None
+            # Should not raise an exception, and should not call fetch_match_info
             result = service.get_matches("48693")
 
             self.assertEqual(client.fetch_matches_call_count, 1)
-            self.assertEqual(client.fetch_match_info_call_count, 1)
+            # Should NOT call fetch_match_info anymore
+            self.assertEqual(client.fetch_match_info_call_count, 0)
             self.assertEqual(len(result["matches"]), 1)
             self.assertIsNone(result["matches"][0]["location"])
 
@@ -881,6 +883,128 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
         self.assertIsNone(match["score_away"])
         self.assertFalse(match["is_finished"])
 
+    def test_get_match_fetches_match_info_with_location(self):
+        """Test that get_match fetches match info and includes location."""
+        class DummyClient:
+            def __init__(self):
+                self.fetch_match_info_call_count = 0
+
+            def fetch_matches(self, league_id, use_cache=True):
+                return {"status": 0, "data": {"matches": []}}
+
+            def fetch_match_info(self, match_id, use_cache=True):
+                self.fetch_match_info_call_count += 1
+                return {
+                    "status": 0,
+                    "data": {
+                        "matchId": 2708876,
+                        "matchDay": 1,
+                        "matchNo": 2101,
+                        "kickoffDate": "2025-09-14",
+                        "kickoffTime": "16:00",
+                        "homeTeam": {
+                            "teamname": "TuS Hohnstorf/Elbe I",
+                            "clubId": 927,
+                            "seasonTeamId": 406405,
+                        },
+                        "guestTeam": {
+                            "teamname": "TV Falkenberg",
+                            "clubId": 2606,
+                            "seasonTeamId": 415879,
+                        },
+                        "result": "61:77",
+                        "ergebnisbestaetigt": True,
+                        "abgesagt": False,
+                        "matchInfo": {
+                            "spielfeld": {
+                                "id": 214,
+                                "bezeichnung": "Grundschule Hohnstorf",
+                                "strasse": "Schulstr./Elbdeich",
+                                "plz": "21522",
+                                "ort": "Hohnstorf/Elbe"
+                            }
+                        }
+                    }
+                }
+
+        with TemporaryDirectory() as directory:
+            cache = FileCache(Path(directory))
+            client = DummyClient()
+            service = TeamSLService(cache=cache, client=client)
+
+            result = service.get_match(2708876)
+
+            self.assertEqual(client.fetch_match_info_call_count, 1)
+            self.assertEqual(result["match_id"], 2708876)
+            self.assertEqual(result["location"], "Grundschule Hohnstorf")
+            self.assertEqual(result["score"], "61:77")
+            self.assertEqual(result["home_team"]["name"], "TuS Hohnstorf/Elbe I")
+            self.assertEqual(result["away_team"]["name"], "TV Falkenberg")
+
+    def test_get_match_handles_missing_location(self):
+        """Test that get_match handles missing location gracefully."""
+        class DummyClient:
+            def fetch_matches(self, league_id, use_cache=True):
+                return {"status": 0, "data": {"matches": []}}
+
+            def fetch_match_info(self, match_id, use_cache=True):
+                return {
+                    "status": 0,
+                    "data": {
+                        "matchId": 2708876,
+                        "matchDay": 1,
+                        "matchNo": 2101,
+                        "kickoffDate": "2025-09-14",
+                        "kickoffTime": "16:00",
+                        "homeTeam": {
+                            "teamname": "Home Team",
+                            "clubId": 100,
+                        },
+                        "guestTeam": {
+                            "teamname": "Away Team",
+                            "clubId": 101,
+                        },
+                        "result": None,
+                        "ergebnisbestaetigt": False,
+                        "abgesagt": False,
+                        "matchInfo": {
+                            "spielfeld": None
+                        }
+                    }
+                }
+
+        with TemporaryDirectory() as directory:
+            cache = FileCache(Path(directory))
+            client = DummyClient()
+            service = TeamSLService(cache=cache, client=client)
+
+            result = service.get_match(2708876)
+
+            self.assertEqual(result["match_id"], 2708876)
+            self.assertIsNone(result["location"])
+
+    def test_get_match_raises_on_not_found(self):
+        """Test that get_match raises ValueError when match is not found."""
+        class DummyClient:
+            def fetch_matches(self, league_id, use_cache=True):
+                return {"status": 0, "data": {"matches": []}}
+
+            def fetch_match_info(self, match_id, use_cache=True):
+                return {
+                    "status": 0,
+                    "data": {}  # Empty data - no match
+                }
+
+        with TemporaryDirectory() as directory:
+            cache = FileCache(Path(directory))
+            client = DummyClient()
+            service = TeamSLService(cache=cache, client=client)
+
+            with self.assertRaises(ValueError) as context:
+                service.get_match(99999)
+
+            self.assertIn("not found", str(context.exception).lower())
+
 
 class TeamSLClientMatchesTests(SimpleTestCase):
     """Tests for matches functionality in TeamSLClient."""
@@ -1097,7 +1221,7 @@ class MatchesEndpointTests(TestCase):
                         "datetime": datetime(2025, 10, 1, 18, 0),
                         "home_team": {"id": "3", "name": "Future Home"},
                         "away_team": {"id": "4", "name": "Future Away"},
-                        "location": "Sports Hall",
+                        "location": None,  # Location is not included by default
                         "score": None,
                         "score_home": None,
                         "score_away": None,
@@ -1127,5 +1251,70 @@ class MatchesEndpointTests(TestCase):
             self.assertIsNone(future["score"])
             self.assertIsNone(future["score_home"])
             self.assertIsNone(future["score_away"])
-            self.assertEqual(future["location"], "Sports Hall")
+            # Location is None by default (use /match/{id} endpoint for location)
+            self.assertIsNone(future["location"])
+
+    def test_match_endpoint_returns_match_with_location(self):
+        """Test that the /match/{id} endpoint returns match with location."""
+        with patch('api.api.service') as mock_service:
+            mock_service.get_match.return_value = {
+                "match_id": 2708876,
+                "match_day": 1,
+                "match_no": 2101,
+                "datetime": datetime(2025, 9, 14, 16, 0),
+                "home_team": {
+                    "id": "406405",
+                    "name": "TuS Hohnstorf/Elbe I",
+                    "club_id": 927,
+                    "season_team_id": 406405,
+                },
+                "away_team": {
+                    "id": "415879",
+                    "name": "TV Falkenberg",
+                    "club_id": 2606,
+                    "season_team_id": 415879,
+                },
+                "location": "Grundschule Hohnstorf",  # Location is included
+                "score": "61:77",
+                "score_home": 61,
+                "score_away": 77,
+                "is_finished": True,
+                "is_confirmed": True,
+                "is_cancelled": False,
+            }
+
+            response = self.client.get("/match/2708876")
+
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["match_id"], 2708876)
+            self.assertEqual(data["location"], "Grundschule Hohnstorf")
+            self.assertEqual(data["score"], "61:77")
+            self.assertEqual(data["home_team"]["name"], "TuS Hohnstorf/Elbe I")
+            self.assertEqual(data["away_team"]["name"], "TV Falkenberg")
+            mock_service.get_match.assert_called_once_with(2708876, use_cache=True)
+
+    def test_match_endpoint_respects_use_cache_parameter(self):
+        """Test that the use_cache parameter is passed to the service."""
+        with patch('api.api.service') as mock_service:
+            mock_service.get_match.return_value = {
+                "match_id": 2708876,
+                "match_day": 1,
+                "match_no": 2101,
+                "datetime": datetime(2025, 9, 14, 16, 0),
+                "home_team": {"id": "1", "name": "Home Team"},
+                "away_team": {"id": "2", "name": "Away Team"},
+                "location": None,
+                "score": None,
+                "score_home": None,
+                "score_away": None,
+                "is_finished": False,
+                "is_confirmed": False,
+                "is_cancelled": False,
+            }
+
+            response = self.client.get("/match/2708876?use_cache=false")
+
+            self.assertEqual(response.status_code, 200)
+            mock_service.get_match.assert_called_once_with(2708876, use_cache=False)
 
