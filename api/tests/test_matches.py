@@ -241,6 +241,126 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
             self.assertEqual(len(result["matches"]), 1)
             self.assertIsNone(result["matches"][0]["location"])
 
+    def test_get_matches_handles_none_match_info_gracefully(self):
+        """Test that get_matches handles matchInfo being None gracefully."""
+        class DummyClient:
+            def __init__(self):
+                self.fetch_matches_call_count = 0
+                self.fetch_match_info_call_count = 0
+
+            def fetch_matches(self, league_id, use_cache=True):
+                self.fetch_matches_call_count += 1
+                return {
+                    "status": 0,
+                    "data": {
+                        "matches": [
+                            {
+                                "matchId": 2707599,
+                                "matchDay": 1,
+                                "matchNo": 1,
+                                "kickoffDate": "2025-09-14",
+                                "kickoffTime": "16:00",
+                                "homeTeam": {
+                                    "teamname": "Home Team",
+                                    "clubId": 100,
+                                },
+                                "guestTeam": {
+                                    "teamname": "Away Team",
+                                    "clubId": 101,
+                                },
+                                "result": None,
+                                "ergebnisbestaetigt": False,
+                                "abgesagt": False,
+                            }
+                        ]
+                    }
+                }
+
+            def fetch_match_info(self, match_id, use_cache=True):
+                self.fetch_match_info_call_count += 1
+                # Simulate API response where matchInfo is explicitly None
+                return {
+                    "status": 0,
+                    "data": {
+                        "matchId": match_id,
+                        "matchInfo": None  # This is the problematic case
+                    }
+                }
+
+        with TemporaryDirectory() as directory:
+            cache = FileCache(Path(directory))
+            client = DummyClient()
+            service = TeamSLService(cache=cache, client=client)
+
+            # Should not raise an exception, but location should be None
+            result = service.get_matches("48693")
+
+            self.assertEqual(client.fetch_matches_call_count, 1)
+            self.assertEqual(client.fetch_match_info_call_count, 1)
+            self.assertEqual(len(result["matches"]), 1)
+            self.assertIsNone(result["matches"][0]["location"])
+
+    def test_get_matches_handles_none_spielfeld_gracefully(self):
+        """Test that get_matches handles spielfeld being None gracefully."""
+        class DummyClient:
+            def __init__(self):
+                self.fetch_matches_call_count = 0
+                self.fetch_match_info_call_count = 0
+
+            def fetch_matches(self, league_id, use_cache=True):
+                self.fetch_matches_call_count += 1
+                return {
+                    "status": 0,
+                    "data": {
+                        "matches": [
+                            {
+                                "matchId": 2707609,
+                                "matchDay": 1,
+                                "matchNo": 1,
+                                "kickoffDate": "2025-09-14",
+                                "kickoffTime": "16:00",
+                                "homeTeam": {
+                                    "teamname": "Home Team",
+                                    "clubId": 100,
+                                },
+                                "guestTeam": {
+                                    "teamname": "Away Team",
+                                    "clubId": 101,
+                                },
+                                "result": None,
+                                "ergebnisbestaetigt": False,
+                                "abgesagt": False,
+                            }
+                        ]
+                    }
+                }
+
+            def fetch_match_info(self, match_id, use_cache=True):
+                self.fetch_match_info_call_count += 1
+                # Simulate API response where spielfeld is explicitly None
+                return {
+                    "status": 0,
+                    "data": {
+                        "matchId": match_id,
+                        "matchInfo": {
+                            "spielfeld": None  # This is another problematic case
+                        }
+                    }
+                }
+
+        with TemporaryDirectory() as directory:
+            cache = FileCache(Path(directory))
+            client = DummyClient()
+            service = TeamSLService(cache=cache, client=client)
+
+            # Should not raise an exception, but location should be None
+            result = service.get_matches("48693")
+
+            self.assertEqual(client.fetch_matches_call_count, 1)
+            self.assertEqual(client.fetch_match_info_call_count, 1)
+            self.assertEqual(len(result["matches"]), 1)
+            self.assertIsNone(result["matches"][0]["location"])
+
     def test_normalize_matches_extracts_all_fields(self):
         """Test that normalization extracts all expected fields from API response."""
         raw_data = {

@@ -99,9 +99,12 @@ class TeamSLService:
                 try:
                     match_info = self._decorated_client.fetch_match_info(match_id, use_cache=use_cache)
                     # Extract location from matchInfo.spielfeld.bezeichnung
-                    match_data = match_info.get("data", {})
-                    match_info_data = match_data.get("matchInfo", {})
-                    spielfeld = match_info_data.get("spielfeld", {})
+                    # Handle None values - .get() only uses default if key is missing, not if value is None
+                    if not match_info:
+                        continue
+                    match_data = match_info.get("data") or {}
+                    match_info_data = match_data.get("matchInfo") or {}
+                    spielfeld = match_info_data.get("spielfeld") or {}
                     location = spielfeld.get("bezeichnung")
                     if location:
                         match_locations[match_id] = location
