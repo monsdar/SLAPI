@@ -60,6 +60,7 @@ class Match(Schema):
     is_finished: bool
     is_confirmed: bool
     is_cancelled: bool
+    is_forfeit: bool = False
 
 
 class MatchListResponse(Schema):

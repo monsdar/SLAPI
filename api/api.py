@@ -114,6 +114,7 @@ def get_matches(request, league_id: str, use_cache: bool = True):
             is_finished=match["is_finished"],
             is_confirmed=match["is_confirmed"],
             is_cancelled=match["is_cancelled"],
+            is_forfeit=match.get("is_forfeit", False),
         )
         for match in data["matches"]
     ]
@@ -153,6 +154,7 @@ def get_match(request, match_id: int, use_cache: bool = True):
         is_finished=match_data["is_finished"],
         is_confirmed=match_data["is_confirmed"],
         is_cancelled=match_data["is_cancelled"],
+        is_forfeit=match_data.get("is_forfeit", False),
     )
 
 

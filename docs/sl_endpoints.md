@@ -41,6 +41,7 @@ Key points (observed during live calls on 2025‑11‑15):
 - `ligaData` contains identifiers (league, season, governing association, cross-table availability flags, etc.).
 - `matches[]` always covers the full season, mixing finished games (`result` string) with scheduled ones (`result`: `null`). There is no paging or date filtering server-side—clients must slice data themselves.
 - Team objects provide both display names (`teamname`, `teamnameSmall`) and identifiers (`teamPermanentId`, `seasonTeamId`, `clubId`), which is useful when correlating standings and schedules.
+- **Forfeited matches:** When a team forfeits (cannot play on short notice), the result is recorded as `"20:0"` or `"0:20"`. There is no explicit flag to indicate a forfeit—detection must be based on the score pattern. See the `/rest/match/id/{matchId}/matchInfo` section for more details.
 
 Source: [basketball-bund.net](https://www.basketball-bund.net/rest/competition/spielplan/id/48714)
 
@@ -102,6 +103,32 @@ Key points:
 - `data.matchInfo.spielfeld` also includes address details (`strasse`, `plz`, `ort`) for more complete location information.
 - The endpoint provides additional match details including top performances and referee assignments (`srList`).
 - This endpoint is essential for obtaining match location information, as the schedule endpoint (`/rest/competition/spielplan/id/{ligaId}`) does not include location data in the match objects.
+
+#### Forfeited matches
+
+When a team cannot play on short notice (e.g., not enough players due to illness), the game is forfeited and counted as **20:0** for the team that wanted to play. The forfeiting team receives 0 points, and the opposing team receives 20 points.
+
+**Detection:** There is no explicit flag in the API response to indicate a forfeit. The only way to detect a forfeited match is by checking if the score is exactly `"20:0"` or `"0:20"`. In such cases:
+- `result` will be `"0:20"` (if home team forfeited) or `"20:0"` (if away team forfeited)
+- `ergebnisbestaetigt` is typically `true` (the result is confirmed)
+- `verzicht` and `abgesagt` are both `false` (the match is not marked as cancelled or forfeit in the API)
+- All player statistics in `matchInfo.topPerformances` will be `0.0` (no actual game was played)
+
+**Edge case:** If a game actually ends with a score of 20:0 through normal play, it cannot be distinguished from a forfeit using the API data alone. However, this is extremely rare in basketball.
+
+Example forfeited match (matchId: 2677938):
+```json
+{
+  "result": "0:20",
+  "ergebnisbestaetigt": true,
+  "verzicht": false,
+  "abgesagt": false,
+  "matchResult": {
+    "heimEndstand": 0,
+    "gastEndstand": 20
+  }
+}
+```
 
 Source: [basketball-bund.net](https://www.basketball-bund.net/rest/match/id/2708876/matchInfo)
 

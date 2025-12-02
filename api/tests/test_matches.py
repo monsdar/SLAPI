@@ -893,6 +893,145 @@ class TeamSLServiceMatchesTests(SimpleTestCase):
         self.assertIsNone(match["score_away"])
         self.assertFalse(match["is_finished"])
 
+    def test_normalize_matches_detects_forfeit_0_20(self):
+        """Test that forfeit is detected when score is 0:20 (home team forfeited)."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 2677938,
+                        "matchDay": 1,
+                        "matchNo": 5501,
+                        "kickoffDate": "2025-09-13",
+                        "kickoffTime": "18:30",
+                        "homeTeam": {
+                            "teamname": "Eisbären Bremerhaven a.K.",
+                            "clubId": 4447,
+                            "verzicht": False,
+                        },
+                        "guestTeam": {
+                            "teamname": "BTS Neustadt",
+                            "clubId": 1477,
+                            "verzicht": False,
+                        },
+                        "result": "0:20",
+                        "ergebnisbestaetigt": True,
+                        "abgesagt": False,
+                        "verzicht": False,
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "48697")
+
+        match = result["matches"][0]
+        self.assertEqual(match["score"], "0:20")
+        self.assertEqual(match["score_home"], 0)
+        self.assertEqual(match["score_away"], 20)
+        self.assertTrue(match["is_finished"])
+        self.assertTrue(match["is_forfeit"])
+        self.assertFalse(match["is_cancelled"])
+
+    def test_normalize_matches_detects_forfeit_20_0(self):
+        """Test that forfeit is detected when score is 20:0 (away team forfeited)."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 12345,
+                        "matchDay": 1,
+                        "matchNo": 1,
+                        "kickoffDate": "2025-09-13",
+                        "kickoffTime": "18:30",
+                        "homeTeam": {
+                            "teamname": "Home Team",
+                            "clubId": 100,
+                            "verzicht": False,
+                        },
+                        "guestTeam": {
+                            "teamname": "Away Team",
+                            "clubId": 101,
+                            "verzicht": False,
+                        },
+                        "result": "20:0",
+                        "ergebnisbestaetigt": True,
+                        "abgesagt": False,
+                        "verzicht": False,
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "12345")
+
+        match = result["matches"][0]
+        self.assertEqual(match["score"], "20:0")
+        self.assertEqual(match["score_home"], 20)
+        self.assertEqual(match["score_away"], 0)
+        self.assertTrue(match["is_finished"])
+        self.assertTrue(match["is_forfeit"])
+        self.assertFalse(match["is_cancelled"])
+
+    def test_normalize_matches_not_forfeit_for_other_scores(self):
+        """Test that matches with other scores are not marked as forfeits."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 12345,
+                        "matchDay": 1,
+                        "matchNo": 1,
+                        "kickoffDate": "2025-09-13",
+                        "kickoffTime": "18:30",
+                        "homeTeam": {"teamname": "Home Team"},
+                        "guestTeam": {"teamname": "Away Team"},
+                        "result": "76:64",
+                        "ergebnisbestaetigt": True,
+                        "abgesagt": False,
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "12345")
+
+        match = result["matches"][0]
+        self.assertEqual(match["score"], "76:64")
+        self.assertFalse(match["is_forfeit"])
+
+    def test_normalize_matches_not_forfeit_for_scheduled_matches(self):
+        """Test that scheduled matches (no result) are not marked as forfeits."""
+        raw_data = {
+            "status": 0,
+            "data": {
+                "matches": [
+                    {
+                        "matchId": 12345,
+                        "matchDay": 1,
+                        "matchNo": 1,
+                        "kickoffDate": "2025-09-13",
+                        "kickoffTime": "18:30",
+                        "homeTeam": {"teamname": "Home Team"},
+                        "guestTeam": {"teamname": "Away Team"},
+                        "result": None,
+                        "ergebnisbestaetigt": False,
+                        "abgesagt": False,
+                    }
+                ]
+            }
+        }
+
+        result = TeamSLService._normalize_matches(raw_data, "12345")
+
+        match = result["matches"][0]
+        self.assertIsNone(match["score"])
+        self.assertFalse(match["is_forfeit"])
+        self.assertFalse(match["is_finished"])
+
     def test_get_match_fetches_match_info_with_location(self):
         """Test that get_match fetches match info and includes location."""
         class DummyClient:
@@ -1170,6 +1309,7 @@ class MatchesEndpointTests(TestCase):
                         "is_finished": True,
                         "is_confirmed": True,
                         "is_cancelled": False,
+                        "is_forfeit": False,
                     }
                 ]
             }
@@ -1193,6 +1333,7 @@ class MatchesEndpointTests(TestCase):
             self.assertEqual(data["matches"][0]["score_away"], 64)
             self.assertTrue(data["matches"][0]["is_finished"])
             self.assertTrue(data["matches"][0]["is_confirmed"])
+            self.assertFalse(data["matches"][0]["is_forfeit"])
 
     def test_matches_endpoint_respects_use_cache_parameter(self):
         """Test that the use_cache parameter is passed to the service."""
@@ -1227,6 +1368,7 @@ class MatchesEndpointTests(TestCase):
                         "is_finished": True,
                         "is_confirmed": True,
                         "is_cancelled": False,
+                        "is_forfeit": False,
                     },
                     {
                         "match_id": 2,
@@ -1242,6 +1384,7 @@ class MatchesEndpointTests(TestCase):
                         "is_finished": False,
                         "is_confirmed": False,
                         "is_cancelled": False,
+                        "is_forfeit": False,
                     }
                 ]
             }
@@ -1258,6 +1401,7 @@ class MatchesEndpointTests(TestCase):
             self.assertIsNotNone(finished["score"])
             self.assertEqual(finished["score_home"], 76)
             self.assertEqual(finished["score_away"], 64)
+            self.assertFalse(finished["is_forfeit"])
             
             # Check future match
             future = data["matches"][1]
@@ -1265,6 +1409,7 @@ class MatchesEndpointTests(TestCase):
             self.assertIsNone(future["score"])
             self.assertIsNone(future["score_home"])
             self.assertIsNone(future["score_away"])
+            self.assertFalse(future["is_forfeit"])
             # Location is None by default (use /match/{id} endpoint for location)
             self.assertIsNone(future["location"])
 
@@ -1310,6 +1455,7 @@ class MatchesEndpointTests(TestCase):
             self.assertEqual(data["score"], "61:77")
             self.assertEqual(data["home_team"]["name"], "TuS Hohnstorf/Elbe I")
             self.assertEqual(data["away_team"]["name"], "TV Falkenberg")
+            self.assertFalse(data["is_forfeit"])
             mock_service.get_match.assert_called_once_with(2708876, use_cache=True)
 
     def test_match_endpoint_respects_use_cache_parameter(self):

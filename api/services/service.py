@@ -356,6 +356,16 @@ class TeamSLService:
                 away_team_data.get("verzicht", False)
             )
             
+            # A match is a forfeit if the score is exactly "20:0" or "0:20"
+            # This is the only way to detect forfeits, as there's no explicit flag in the API
+            # Note: This cannot distinguish between a forfeit and a legitimate 20:0 score,
+            # but such scores are extremely rare in basketball
+            is_forfeit = False
+            if score and is_finished:
+                # Normalize the score string (remove whitespace) and check for forfeit pattern
+                normalized_score = score.strip()
+                is_forfeit = normalized_score in ("20:0", "0:20")
+            
             # Extract location - first try from match_locations (fetched from matchInfo endpoint),
             # then fall back to match data fields
             location = match_locations.get(match_id)
@@ -382,6 +392,7 @@ class TeamSLService:
                 "is_finished": is_finished,
                 "is_confirmed": is_confirmed,
                 "is_cancelled": is_cancelled,
+                "is_forfeit": is_forfeit,
             }
             
             normalized_matches.append(normalized_match)
